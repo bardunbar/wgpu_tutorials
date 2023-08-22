@@ -14,6 +14,8 @@ struct State {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
+
+    clear_color: wgpu::Color,
 }
 
 impl State {
@@ -76,6 +78,7 @@ impl State {
             queue,
             config,
             size,
+            clear_color: wgpu::Color { r: 0.1, g: 0.2, b: 0.0, a: 1.0, }
         }
     }
 
@@ -84,24 +87,63 @@ impl State {
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        todo!()
+        if new_size.width > 0 && new_size.height > 0 {
+            self.size = new_size;
+            self.config.width = new_size.width;
+            self.config.height = new_size.height;
+            self.surface.configure(&self.device, &self.config);
+        }
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        todo!()
+
+        match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.clear_color.r = position.x / self.size.width as f64;
+                self.clear_color.g = position.y / self.size.height as f64;
+            },
+            _ => {}
+        }
+
+        false
     }
 
     fn update(&mut self) {
-        todo!()
+        // todo!()
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        todo!()
+        let output = self.surface.get_current_texture()?;
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
+
+        {
+            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        store: true
+                    }
+                })],
+                depth_stencil_attachment: None,
+            });
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
     }
 }
 
 #[cfg_attr(target_arch="wasm32", wasm_bindgen(start))]
-pub fn run() {
+pub async fn run() {
     cfg_if::cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
             std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -131,22 +173,43 @@ pub fn run() {
             .expect("Couldn't append canvas to document body.");
     }
 
+    let mut state = State::new(window).await;
 
-    event_loop.run(move |event, _, control_flow| 
+    event_loop.run(move |event, _, control_flow|
         match event {
-            Event::WindowEvent { 
-                ref event, 
-                window_id 
-            } if window_id == window.id() => match event {
-                WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
-                     input: KeyboardInput{
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
+            Event::WindowEvent {
+                ref event,
+                window_id
+            } if window_id == state.window().id() => if !state.input(event) {
+                match event {
+                    WindowEvent::CloseRequested | WindowEvent::KeyboardInput {
+                         input: KeyboardInput{
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                         },
                         ..
-                     },
-                    ..
-                } => *control_flow = ControlFlow::Exit,
-                _ => {}
+                    } => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(physical_size) => {
+                        state.resize(*physical_size);
+                    },
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        state.resize(**new_inner_size);
+                    }
+                    _ => {}
+                }
+            },
+            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
+                state.update();
+                match state.render() {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    Err(e) => eprintln!("{:?}", e),
+                }
+            },
+            Event::MainEventsCleared => {
+                state.window().request_redraw();
             },
             _ => {}
         });
