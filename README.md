@@ -1,4 +1,4 @@
 # wgpu_tutorials
 
 ## Current Tutorial Stage
-https://sotrh.github.io/learn-wgpu/beginner/tutorial4-buffer/#we-re-finally-talking-about-them
+https://sotrh.github.io/learn-wgpu/beginner/tutorial5-textures/#loading-an-image-from-a-file
