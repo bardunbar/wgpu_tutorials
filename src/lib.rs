@@ -1,4 +1,4 @@
-use cgmath::Transform;
+use cgmath::{Transform, SquareMatrix};
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -75,8 +75,8 @@ impl CameraUniform {
         Self { view_proj: cgmath::Matrix4::identity().into() }
     }
 
-    fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_proj = camera.build_view_projection_matrix().into();
+    fn update_view_proj(&mut self, camera: &Camera, model: &cgmath::Matrix4<f32>) {
+        self.view_proj = (camera.build_view_projection_matrix() * model).into();
     }
 }
 
@@ -88,7 +88,7 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.0, 1.0,
 );
 
-struct Camera {
+pub struct Camera {
     eye: cgmath::Point3<f32>,
     target: cgmath::Point3<f32>,
     up: cgmath::Vector3<f32>,
@@ -134,6 +134,7 @@ struct State {
     // Custom variables
     clear_color: wgpu::Color,
     texture_toggle_state: bool,
+    model_matrix: cgmath::Matrix4<f32>,
 }
 
 impl State {
@@ -251,6 +252,9 @@ impl State {
             }
         );
 
+
+        let model = cgmath::Matrix4::identity();
+
         let camera_controller = camera_controller::CameraController::new(0.2);
         let camera = Camera {
             eye: (0.0, 1.0, 2.0).into(),
@@ -263,7 +267,7 @@ impl State {
         };
 
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
+        camera_uniform.update_view_proj(&camera, &model);
 
         let camera_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -299,8 +303,6 @@ impl State {
             ],
             label: Some("camera_bind_group")
         });
-
-
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
@@ -399,7 +401,8 @@ impl State {
 
             // Custom Variables
             clear_color: wgpu::Color { r: 0.1, g: 0.2, b: 0.0, a: 1.0, },
-            texture_toggle_state: false
+            texture_toggle_state: false,
+            model_matrix: model,
         }
     }
 
@@ -445,8 +448,15 @@ impl State {
     }
 
     fn update(&mut self) {
+
+        // Slowly rotate the model
+        // self.model_matrix
+        let current_rotation: cgmath::Matrix4<f32> = cgmath::Matrix4::from(cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(1.0) });
+
+        self.model_matrix = self.model_matrix * current_rotation;
+
         self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
+        self.camera_uniform.update_view_proj(&self.camera, &self.model_matrix);
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
