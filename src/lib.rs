@@ -1,4 +1,4 @@
-use cgmath::{prelude::*, SquareMatrix};
+use cgmath::{prelude::*, SquareMatrix, Quaternion};
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -127,8 +127,8 @@ impl CameraUniform {
         Self { view_proj: cgmath::Matrix4::identity().into() }
     }
 
-    fn update_view_proj(&mut self, camera: &Camera, model: &cgmath::Matrix4<f32>) {
-        self.view_proj = (camera.build_view_projection_matrix() * model).into();
+    fn update_view_proj(&mut self, camera: &Camera) { //, model: &cgmath::Matrix4<f32>) {
+        self.view_proj = camera.build_view_projection_matrix().into();
     }
 }
 
@@ -170,7 +170,6 @@ struct State {
 
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
-    num_vertices: u32,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     diffuse_bind_group: wgpu::BindGroup,
@@ -189,7 +188,6 @@ struct State {
     // Custom variables
     clear_color: wgpu::Color,
     texture_toggle_state: bool,
-    model_matrix: cgmath::Matrix4<f32>,
 }
 
 impl State {
@@ -307,9 +305,6 @@ impl State {
             }
         );
 
-
-        let model = cgmath::Matrix4::identity();
-
         let camera_controller = camera_controller::CameraController::new(0.2);
         let camera = Camera {
             eye: (0.0, 1.0, 2.0).into(),
@@ -322,7 +317,7 @@ impl State {
         };
 
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera, &model);
+        camera_uniform.update_view_proj(&camera);
 
         let camera_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -422,8 +417,6 @@ impl State {
                 usage: wgpu::BufferUsages::VERTEX,
             }
         );
-        let num_vertices = VERTICES.len() as u32;
-
         let index_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Index Buffer"),
@@ -452,7 +445,7 @@ impl State {
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             }
         );
 
@@ -465,7 +458,6 @@ impl State {
             size,
             render_pipeline,
             vertex_buffer,
-            num_vertices,
             index_buffer,
             num_indices,
             diffuse_bind_group,
@@ -483,7 +475,6 @@ impl State {
             // Custom Variables
             clear_color: wgpu::Color { r: 0.1, g: 0.2, b: 0.0, a: 1.0, },
             texture_toggle_state: false,
-            model_matrix: model,
         }
     }
 
@@ -532,12 +523,17 @@ impl State {
 
         // Slowly rotate the model
         // self.model_matrix
-        let current_rotation: cgmath::Matrix4<f32> = cgmath::Matrix4::from(cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(1.0) });
+        let current_rotation: Quaternion<f32> = cgmath::Quaternion::from(cgmath::Euler { x: cgmath::Deg(0.0), y: cgmath::Deg(0.0), z: cgmath::Deg(1.0) });
 
-        // self.model_matrix = self.model_matrix * current_rotation;
+        self.instances.iter_mut().for_each(|instance|{
+            instance.rotation = instance.rotation * current_rotation;
+        });
+
+        let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instance_data));
 
         self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera, &self.model_matrix);
+        self.camera_uniform.update_view_proj(&self.camera);
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
     }
 
