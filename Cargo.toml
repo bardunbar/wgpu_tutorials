@@ -18,12 +18,10 @@ pollster = "0.3"
 bytemuck = { version = "1.12", features = [ "derive" ] }
 anyhow = "1.0"
 cgmath = "0.18"
-fs_extra = "1.2"
-glob = "0.3"
 
 #####################
-# this is causing compilation issues for wasm32
-tobj = { version = "3.2.1", features = [
+# this is causing compilation issues for wasm32, specifically the ahash feature. Disabled default features to remove it.
+tobj = { version = "3.2.1", default-features = false, features = [
     "async"
 ]}
 #####################
@@ -43,6 +41,14 @@ web-sys = { version = "0.3", features = [
     "Document",
     "Window",
     "Element",
-    "Location"
+    "Location",
 ]}
 reqwest = { version = "0.11" }
+
+[build-dependencies]
+fs_extra = "1.2"
+glob = "0.3"
+
+[[bin]]
+name = "wgpu_tutorials"
+path = "src/main.rs"
