@@ -30,6 +30,7 @@ pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
                 .await?;
         } else {
             let path = std::path::Path::new(&std::env::var("OUT_DIR").unwrap())
+            // let path = std::path::Path::new(env!("OUT_DIR"))
                 .join("res")
                 .join(file_name);
             let txt = std::fs::read_to_string(path)?;
@@ -50,6 +51,7 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
                 .to_vec();
         } else {
             let path = std::path::Path::new(&std::env::var("OUT_DIR").unwrap())
+            // let path = std::path::Path::new(env!("OUT_DIR"))
                 .join("res")
                 .join(file_name);
             let data = std::fs::read(path)?;
