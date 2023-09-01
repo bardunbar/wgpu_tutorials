@@ -190,7 +190,6 @@ impl State {
 
         surface.configure(&device, &config);
 
-        
         let depth_texture = texture::Texture::create_depth_texture(&device, &config, "depth_texture");
                         
         let texture_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -268,9 +267,11 @@ impl State {
             label: Some("camera_bind_group")
         });
 
+        let shader_text = resources::load_string("shader.wgsl").await.unwrap();
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(shader_text.into()),
         });
 
         let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -473,14 +474,8 @@ impl State {
             
             render_pass.set_pipeline(&self.render_pipeline);
             
-            // render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            // render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
-
-            let mesh = &self.obj_model.meshes[0];
-            let material = &self.obj_model.materials[mesh.material];
-
             use model::DrawModel;
-            render_pass.draw_mesh_instanced(mesh, material, 0..self.instances.len() as u32, &self.camera_bind_group);
+            render_pass.draw_model_instanced(&self.obj_model, 0..self.instances.len() as u32, &self.camera_bind_group);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
