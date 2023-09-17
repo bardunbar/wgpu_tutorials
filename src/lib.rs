@@ -25,7 +25,11 @@ struct Instance {
 
 impl Instance {
     fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw { model: (cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation)).into() }
+        let model = cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation);
+        InstanceRaw {
+            model: model.into(),
+            normal: cgmath::Matrix3::from(self.rotation).into(),
+        }
     }
 }
 
@@ -33,6 +37,7 @@ impl Instance {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct InstanceRaw {
     model: [[f32; 4]; 4],
+    normal: [[f32; 3]; 3],
 }
 
 impl InstanceRaw {
@@ -62,6 +67,22 @@ impl InstanceRaw {
                     offset: mem::size_of::<[f32;12]>() as wgpu::BufferAddress,
                     shader_location: 8,
                     format: wgpu::VertexFormat::Float32x4,
+                },
+
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 16]>() as wgpu::BufferAddress,
+                    shader_location: 9,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 19]>() as wgpu::BufferAddress,
+                    shader_location: 10,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 22]>() as wgpu::BufferAddress,
+                    shader_location: 11,
+                    format: wgpu::VertexFormat::Float32x3,
                 },
             ]
         }
@@ -143,7 +164,7 @@ struct State {
     light_uniform: LightUniform,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
-
+    light_render_pipeline: wgpu::RenderPipeline,
 
     // Custom variables
     clear_color: wgpu::Color,
@@ -398,21 +419,20 @@ impl State {
             create_render_pipeline(&device, &render_pipeline_layout, config.format, Some(texture::Texture::DEPTH_FORMAT), &[model::ModelVertex::desc()], shader)
         };
 
-        // TODO: Continue from here
-        // let light_render_pipeline = {
-        //     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        //         label: Some("Light Pipeline Layout"),
-        //         bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
-        //         push_constant_ranges: &[],
-        //     });
-        //     let shader_text = resources::load_string("light.wgsl").await.unwrap();
-        //     let shader = wgpu::ShaderModuleDescriptor {
-        //         label: Some("Light Shader"),
-        //         source: wgpu::ShaderSource::Wgsl(shader_text.into()),
-        //     };
+        let light_render_pipeline = {
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Light Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout, &light_bind_group_layout],
+                push_constant_ranges: &[],
+            });
+            let shader_text = resources::load_string("light.wgsl").await.unwrap();
+            let shader = wgpu::ShaderModuleDescriptor {
+                label: Some("Light Shader"),
+                source: wgpu::ShaderSource::Wgsl(shader_text.into()),
+            };
 
-        //     create_render_pipeline(&device, &layout, config.format, Some(texture::Texture::DEPTH_FORMAT), &[model::ModelVertex::desc()], shader)
-        // };
+            create_render_pipeline(&device, &layout, config.format, Some(texture::Texture::DEPTH_FORMAT), &[model::ModelVertex::desc()], shader)
+        };
 
         const SPACE_BETWEEN: f32 = 3.0;
         let instances = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
@@ -460,6 +480,7 @@ impl State {
             light_uniform,
             light_buffer,
             light_bind_group,
+            light_render_pipeline,
 
             // Custom Variables
             clear_color: wgpu::Color { r: 0.1, g: 0.2, b: 0.0, a: 1.0, },
@@ -563,6 +584,13 @@ impl State {
             });
 
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+
+
+            use crate::model::DrawLight;
+            render_pass.set_pipeline(&self.light_render_pipeline);
+            render_pass.draw_light_model(&self.obj_model, &self.camera_bind_group, &self.light_bind_group);
+
+
 
             render_pass.set_pipeline(&self.render_pipeline);
 
