@@ -2,6 +2,7 @@
 // Vertext Shader
 
 struct Camera {
+    view_pos: vec4<f32>,
     view_proj: mat4x4<f32>,
 }
 
